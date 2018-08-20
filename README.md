@@ -4,7 +4,7 @@ CLI to crawl images and URLs from VOZ (https://forums.voz.vn) thread.
 ### Install
 You must install [Go](https://golang.org) SDK first.
 ```shell
-$ go install github.com/lnquy/vozer/cmd/vozer
+$ go get github.com/lnquy/vozer/cmd/vozer
 ```
 
 ### Usage

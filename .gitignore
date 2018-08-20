@@ -14,3 +14,4 @@
 cmd/vozer/vozer
 cmd/vozer/main
 .idea/
+vendor/
