@@ -13,5 +13,6 @@
 
 cmd/vozer/vozer
 cmd/vozer/main
+cmd/vozer/data/
 .idea/
 vendor/

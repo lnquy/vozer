@@ -3,6 +3,7 @@ package vozer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -116,7 +117,12 @@ func Crawl(ctx context.Context, cfg VozerConfig) error {
 }
 
 func getLastPageNu(url string) (*CrawledPageMeta, int, error) {
-	firstPage, err := goquery.NewDocument(url)
+	resp, err := http.Get(url)
+	if err != nil || resp.StatusCode/200 != 1 {
+		return nil, -1, errors.New("failed to crawl first page from thread")
+	}
+	firstPage, err := goquery.NewDocumentFromReader(resp.Body)
+	resp.Body.Close()
 	if err != nil {
 		return nil, -1, err
 	}
@@ -167,14 +173,14 @@ func retryCrawlingPage(cfg VozerConfig, idx uint, meta *PageURLMeta, client *htt
 		logrus.Debugf("page crawler #%d: crawling page %d (%s)", idx, meta.PageNumber, meta.URL)
 		resp, err := client.Get(meta.URL)
 		if err != nil || resp.StatusCode/200 != 1 {
-			time.Sleep(time.Duration(rand.Intn(8) + 2) * time.Second)
+			time.Sleep(time.Duration(rand.Intn(8)+2) * time.Second)
 			continue
 		}
 
-		doc, err := goquery.NewDocumentFromResponse(resp)
+		doc, err := goquery.NewDocumentFromReader(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			time.Sleep(time.Duration(rand.Intn(8) + 2) * time.Second)
+			time.Sleep(time.Duration(rand.Intn(8)+2) * time.Second)
 			continue
 		}
 		crawledPageChan <- &CrawledPageMeta{meta.PageNumber, doc}
@@ -220,20 +226,20 @@ func crawlData(ctx context.Context, cfg VozerConfig, crawledPageChan <-chan *Cra
 
 func extractURLs(post *goquery.Selection, postCount int) {
 	post.Find("a").Each(func(i int, s *goquery.Selection) {
-		url, ok := s.Attr("href")
-		if ok && url != "" {
-			url = normalizeURL(url)
-			v, existed := urlsMap.Load(url)
+		href, ok := s.Attr("href")
+		if ok && href != "" {
+			href = normalizeURL(href)
+			v, existed := urlsMap.Load(href)
 			if existed {
 				meta := v.(URLMeta)
 				meta.Seen++
 				meta.AtPosts = append(meta.AtPosts, postCount)
-				urlsMap.Store(url, meta)
+				urlsMap.Store(href, meta)
 				return
 			}
 
-			urlsMap.Store(url, URLMeta{
-				URL:     url,
+			urlsMap.Store(href, URLMeta{
+				URL:     href,
 				Text:    s.Text(),
 				Seen:    1,
 				AtPosts: []int{postCount},
