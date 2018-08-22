@@ -15,6 +15,9 @@ type VozerConfig struct {
 	IsCrawlImages bool   `json:"is_crawl_images"`
 	DestPath      string `json:"destination_path"`
 	Retries       uint   `json:"retries"`
+	CrawlPages    []uint `json:"crawl_pages"`
+	CrawlFromPage uint   `json:"crawl_from_page"`
+	CrawlToPage   uint   `json:"crawl_to_page"`
 }
 
 func (c *VozerConfig) Validate() error {
@@ -29,8 +32,11 @@ func (c *VozerConfig) Validate() error {
 		return errors.New("Invalid URL, must point to a VOZ thread")
 	}
 
-	if c.NuWorkers == 0 || c.NuWorkers > 100 {
+	if c.NuWorkers == 0 {
 		c.NuWorkers = 10
+	}
+	if c.NuWorkers > 100 {
+		c.NuWorkers = 100
 	}
 
 	if !c.IsCrawlURLs && c.IsCrawlImages {
@@ -44,6 +50,16 @@ func (c *VozerConfig) Validate() error {
 
 	if c.Retries > 50 {
 		c.Retries = 50
+	}
+
+	for i := range c.CrawlPages {
+		if c.CrawlPages[i] == 0 {
+			c.CrawlPages = append(c.CrawlPages[:i], c.CrawlPages[i+1:]...)
+		}
+	}
+
+	if c.CrawlFromPage > c.CrawlToPage {
+		return fmt.Errorf("Invalid page range: %d-%d", c.CrawlFromPage, c.CrawlToPage)
 	}
 
 	return nil
