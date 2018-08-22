@@ -16,7 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -136,8 +136,8 @@ func Crawl(ctx context.Context, cfg VozerConfig) error {
 	if cfg.IsCrawlImages {
 		imageChan = make(chan *ImageMeta, 5000)
 
-		ensureDir(path.Join(cfg.DestPath, "img"))
-		ensureDir(path.Join(cfg.DestPath, "img", "emoticons"))
+		ensureDir(filepath.Join(cfg.DestPath, "img"))
+		ensureDir(filepath.Join(cfg.DestPath, "img", "emoticons"))
 		for i := uint(0); i < cfg.NuWorkers; i++ {
 			imageWg.Add(1)
 			go crawlImage(ctx, i, imageWg, imageChan, cfg.DestPath)
@@ -148,7 +148,7 @@ func Crawl(ctx context.Context, cfg VozerConfig) error {
 	imageWg.Wait()
 
 	if ctx.Err() == nil {
-		logrus.Infof("all crawlers stopped\n")
+		logrus.Infof("all crawlers stopped")
 		exportMetadataToFiles(cfg)
 	}
 	return nil
@@ -200,13 +200,17 @@ func crawlPage(ctx context.Context, idx uint, cfg VozerConfig, wg *sync.WaitGrou
 			//}
 			//time.Sleep(200*time.Millisecond)
 
-			retryCrawlingPage(cfg, idx, meta, client, crawledPageChan)
+			retryCrawlingPage(ctx, cfg, idx, meta, client, crawledPageChan)
 		}
 	}
 }
 
-func retryCrawlingPage(cfg VozerConfig, idx uint, meta *PageURLMeta, client *http.Client, crawledPageChan chan<- *CrawledPageMeta) {
+func retryCrawlingPage(ctx context.Context, cfg VozerConfig, idx uint, meta *PageURLMeta, client *http.Client, crawledPageChan chan<- *CrawledPageMeta) {
 	for i := uint(1); i <= cfg.Retries; i++ {
+		if ctx.Err() != nil {
+			return
+		}
+
 		logrus.Debugf("page crawler #%d: crawling page %d (%s)", idx, meta.PageNumber, meta.URL)
 		resp, err := client.Get(meta.URL)
 		if err != nil || resp.StatusCode/200 != 1 {
@@ -346,11 +350,11 @@ func crawlImage(ctx context.Context, idx uint, wg *sync.WaitGroup, imageChan <-c
 			if err != nil {
 				continue
 			}
-			fp := path.Join(destPath, "img")
+			fp := filepath.Join(destPath, "img")
 			if isEmoticon(bytes.NewReader(b)) {
-				fp = path.Join(fp, "emoticons")
+				fp = filepath.Join(fp, "emoticons")
 			}
-			fp = path.Join(fp, meta.Filename)
+			fp = filepath.Join(fp, meta.Filename)
 			resp.Body.Close()
 			if err := ioutil.WriteFile(fp, b, 0644); err != nil {
 				logrus.Errorf("image crawler #%d: failed to write image to %s: %s", idx, fp, err)
@@ -378,7 +382,7 @@ func normalizeURL(rawURL string) string {
 
 func ensureDir(p string) {
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		os.MkdirAll(p, 0777) // TODO: Permission
+		os.MkdirAll(p, os.ModePerm)
 	}
 }
 
@@ -402,7 +406,7 @@ func exportMetadataToFiles(cfg VozerConfig) {
 			return true
 		})
 		sort.Sort(bySeenURL(urls))
-		writeToFile(path.Join(cfg.DestPath, "urls_meta.json"), urls)
+		writeToFile(filepath.Join(cfg.DestPath, "urls_meta.json"), urls)
 	}
 
 	if cfg.IsCrawlImages {
@@ -412,12 +416,12 @@ func exportMetadataToFiles(cfg VozerConfig) {
 			return true
 		})
 		sort.Sort(bySeenImage(images))
-		writeToFile(path.Join(cfg.DestPath, "images_meta.json"), images)
+		writeToFile(filepath.Join(cfg.DestPath, "images_meta.json"), images)
 	}
 
 	mux.RLock()
 	if len(crawledMeta.Success) > 0 || len(crawledMeta.Failed) > 0 {
-		writeToFile(path.Join(cfg.DestPath, "report.json"), &Report{
+		writeToFile(filepath.Join(cfg.DestPath, "report.json"), &Report{
 			Config:  cfg,
 			Crawled: crawledMeta,
 		})

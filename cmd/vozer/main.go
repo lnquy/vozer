@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,6 +15,8 @@ import (
 	"github.com/lnquy/vozer"
 	"github.com/sirupsen/logrus"
 )
+
+const VOZER_VERSION = "0.0.3"
 
 var (
 	fThreadURL   = flag.String("u", "", "URL to VOZ thread")
@@ -24,10 +28,17 @@ var (
 	fVerbose     = flag.Bool("debug", false, "Print debug log")
 	fCrawlRange  = flag.String("range", "0-0", "Page range to crawl data, separated by hyphen (-)")
 	fCrawlPages  = flag.String("pages", "", "List of page numbers to crawl data, separated by comma (,)")
+	fVersion     = flag.Bool("v", false, "Print vozer version and exit")
 )
 
 func main() {
 	flag.Parse()
+
+	if *fVersion {
+		fmt.Printf("vozer-%s-%s_v%s\n", runtime.GOOS, runtime.GOARCH, VOZER_VERSION)
+		os.Exit(0)
+	}
+
 	if *fVerbose {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
@@ -35,7 +46,7 @@ func main() {
 	crawlRange := strings.Split(*fCrawlRange, "-")
 	if len(crawlRange) != 2 {
 		logrus.Errorf("Invalid page range: %s", *fCrawlRange)
-		return
+		os.Exit(1)
 	}
 
 	var pages []uint
@@ -60,7 +71,7 @@ func main() {
 	if err := cfg.Validate(); err != nil {
 		logrus.Error(err)
 		flag.PrintDefaults()
-		return
+		os.Exit(1)
 	}
 
 	start := time.Now()
@@ -75,12 +86,12 @@ func main() {
 
 	if err := vozer.Crawl(ctx, cfg); err != nil {
 		logrus.Errorf("failed to crawl \"%s\": %s", cfg.ThreadURL, err)
-		return
+		os.Exit(1)
 	}
 
 	if ctx.Err() != nil {
 		logrus.Infof("operation cancelled by user")
-		return
+		os.Exit(0)
 	}
 	logrus.Infof("crawled thread \"%s\" successfully in %v", cfg.ThreadURL, time.Since(start))
 }

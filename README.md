@@ -36,9 +36,10 @@ Usage of vozer:
   -r uint
     	Number of time to re-crawl page if failed (default 20)
   -range string
-    	Page number range to crawl data, separated by hyphen (-) (default "0-0")
+    	Page range to crawl data, separated by hyphen (-) (default "0-0")
   -u string
     	URL to VOZ thread
+  -v	Print vozer version
   -w uint
     	Number of workers to crawl data (default 10)
 ```
