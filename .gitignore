@@ -16,3 +16,8 @@ cmd/vozer/main
 cmd/vozer/data/
 .idea/
 vendor/
+gui/deploy
+gui/rcc*
+gui/linux
+gui/windows
+gui/darwin
