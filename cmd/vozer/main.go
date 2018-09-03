@@ -16,7 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const VOZER_VERSION = "0.0.3"
+const VOZER_VERSION = "0.0.4"
 
 var (
 	fThreadURL   = flag.String("u", "", "URL to VOZ thread")

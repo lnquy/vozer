@@ -3,8 +3,8 @@ package vozer
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -75,7 +75,7 @@ type (
 )
 
 func Crawl(ctx context.Context, cfg VozerConfig) error {
-	logrus.Infof("start crawling thread")
+	logrus.Infof("start crawling thread %s", cfg.ThreadURL)
 	ensureDir(cfg.DestPath)
 
 	// Always crawl first page of thread to determine thread's page range
@@ -155,9 +155,13 @@ func Crawl(ctx context.Context, cfg VozerConfig) error {
 }
 
 func getLastPageNu(url string) (int, error) {
-	resp, err := http.Get(url)
+	req, err := getCustomRequest(url)
+	if err != nil {
+		return -1, fmt.Errorf("failed to init request to first page: %s", err)
+	}
+	resp, err := getHTTPClient().Do(req)
 	if err != nil || resp.StatusCode/200 != 1 {
-		return -1, errors.New("failed to crawl first page from thread")
+		return -1, fmt.Errorf("failed to crawl first page from thread: %s, %s", resp.Status, err)
 	}
 	firstPage, err := goquery.NewDocumentFromReader(resp.Body)
 	resp.Body.Close()
@@ -179,8 +183,6 @@ func getLastPageNu(url string) (int, error) {
 func crawlPage(ctx context.Context, idx uint, cfg VozerConfig, wg *sync.WaitGroup, pageURLChan chan *PageURLMeta, crawledPageChan chan<- *CrawledPageMeta) {
 	defer wg.Done()
 
-	client := &http.Client{}
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -200,7 +202,7 @@ func crawlPage(ctx context.Context, idx uint, cfg VozerConfig, wg *sync.WaitGrou
 			//}
 			//time.Sleep(200*time.Millisecond)
 
-			retryCrawlingPage(ctx, cfg, idx, meta, client, crawledPageChan)
+			retryCrawlingPage(ctx, cfg, idx, meta, getHTTPClient(), crawledPageChan)
 		}
 	}
 }
@@ -212,7 +214,11 @@ func retryCrawlingPage(ctx context.Context, cfg VozerConfig, idx uint, meta *Pag
 		}
 
 		logrus.Debugf("page crawler #%d: crawling page %d (%s)", idx, meta.PageNumber, meta.URL)
-		resp, err := client.Get(meta.URL)
+		req, err := getCustomRequest(meta.URL)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode/200 != 1 {
 			time.Sleep(time.Duration(rand.Intn(8)+2) * time.Second)
 			continue
@@ -363,6 +369,29 @@ func crawlImage(ctx context.Context, idx uint, wg *sync.WaitGroup, imageChan <-c
 			logrus.Infof("image crawler #%d: %s -> %s", idx, meta.URL, meta.Filename)
 		}
 	}
+}
+
+func getHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+		Timeout: 10 * time.Second,
+	}
+}
+
+// Since 2018/09/01, voz added filter on go client user-agent.
+// => Fake valid user-agent to bypass the filter.
+func getCustomRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Cookie", "vflastvisit=1535954670; vflastactivity=0; vfforum_view=d99e85613f547374e9db4f942bf6192fb611ae2aa-1-%7Bi-17_i-1535954671_%7D; _ga=GA1.2.144936460.1535954673; _gid=GA1.2.1737523081.1535954673; _gat_gtag_UA_351630_1=1")
+	req.Header.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36")
+	return req, nil
 }
 
 func normalizeURL(rawURL string) string {
